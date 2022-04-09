@@ -1,13 +1,17 @@
 import Control.Exception qualified as Exception
-import Control.Monad (void)
+import Control.Monad (void, foldM)
 import Data.ByteString (ByteString)
-import Data.ByteString qualified as ByteString
-import Data.ByteString.Char8 qualified as ByteString.Char8
-import Data.Char (toLower, isSpace)
-import Data.Void (Void)
+import Data.ByteString qualified as BS
+import Data.ByteString.Char8 qualified as BS.Char8
+import Data.Word8 (Word8)
+import Data.Word8 qualified as Word8
+import Data.Char (isSpace)
+import Data.Either (partitionEithers)
 import Data.Functor ((<&>))
 import Data.Function ((&))
-import Data.List (isInfixOf)
+import Data.Set qualified as Set
+import Data.Set (Set)
+import Data.Void (Void)
 import Network.Socket (
     accept,
     addrAddress,
@@ -31,90 +35,40 @@ import Network.Socket (
     withFdSocket,
     )
 import Network.Socket.ByteString (recv)
+import System.Environment (getArgs)
+import System.Exit (exitFailure)
 
-import Text.Read (readMaybe)
-
-import Common
-import Settings
+import Types
+import Settings qualified
 
 max_bytes :: Int
-max_bytes = 1023
+max_bytes = 8192
 
-type Database = ([Address] , [Address])
+type Database = Set Address
 
 main :: IO Void
 main = do
-    putStrLn "starting server..."
-    database <- ByteString.readFile alias_file <&> parse_database
-    run_server database
+    aliases_file <- getArgs
+                >>= \case
+                    [arg] -> pure arg
+                    _ -> BS.Char8.putStrLn usage >> exitFailure
+                        where
+                            usage = "usage: mads-server filename"
+    putStrLn $ ["loading ", aliases_file, "..."] & concat
+    database <- BS.readFile aliases_file
+            <&> parsed_database
+    run_server aliases_file database
 
 
-parse_database :: ByteString -> Database
--- parse_database = lines <&> filter (not . all isSpace) <&> map addr <&> (,[])
-parse_database = ByteString.Char8.lines <&> filter (not . ByteString.Char8.all isSpace) <&> map ByteString.Char8.unpack <&> map addr <&> (,[])
-    where
-        addr = words <&> last <&> Address <&> normalize
-
-
-insert :: Database -> Address -> Database
-insert (db0, db1) addr = (db0, addr:db1)
-
-is_new_and_valid :: Address -> Database -> Bool
-is_new_and_valid addr db = is_valid && is_new
-    where
-        is_new = not $ db `contains` addr
-        is_valid = not $ or $
-            (`isInfixOf` (from_address addr)) <$> disallowed
-                where
-                    disallowed = [
-                        "noreply",
-                        "no-reply",
-                        "donot-reply",
-                        "do-not-reply",
-                        "nepasrepondre"
-                        ]
-
-
-contains :: Database -> Address -> Bool
-contains (db0, db1) addr = n_addr `elem` db0 || n_addr `elem` db1
-    where
-        n_addr = normalize addr
-
-save :: Alias -> IO ()
-save entry = putStrLn ("saving: " <> line) >> appendFile alias_file line
-    where
-        line = "alias " ++ showAlias entry
-
-save_addr :: Address -> IO ()
-save_addr addr = putStrLn ("saving: " <> line) >> appendFile alias_file line
-    where
-        line = "alias " ++ from_address addr
-
-showAlias :: Alias -> String
-showAlias entry = unwords (ali:name entry:addr:["\n"])
-    where
-        ali :: String
-        ali = case alias entry of
-            Nothing -> (filter ((/=) ' ')) (name entry) & map toLower
-            Just str -> str
-        addr = entry & address & from_address & enclose
-            where
-                enclose = ('<' :) <&> (<> ">")
-
-
-read_alias :: ByteString -> Maybe Sender
-read_alias = ByteString.Char8.unpack <&> readMaybe
-
-
-run_server :: Database -> IO Void
-run_server database = do
+run_server :: FilePath -> Database -> IO Void
+run_server aliases_file database = do
     addr <- resolve
-    void $ Exception.bracket (open addr) close (loop database)
+    void $ Exception.bracket (open addr) close (loop aliases_file database)
     pure $ error "server is terminating."
     where
         resolve :: IO AddrInfo
         resolve = do
-            getAddrInfo (Just hints) Nothing (Just port_number) <&> head
+            getAddrInfo (Just hints) Nothing (Just Settings.port_number) <&> head
                 where
                     hints = defaultHints {
                         addrFlags = [AI_PASSIVE],
@@ -133,39 +87,152 @@ run_server database = do
             pure sock
 
 
-loop :: Database -> Socket -> IO Database
-loop database sock = do
+loop :: FilePath -> Database -> Socket -> IO Database
+loop aliases_file database sock = do
     (conn, _peer) <- accept sock
-    new_db <- process_msg database conn
-    loop new_db sock
+    new_db <- process_msg aliases_file database conn
+    loop aliases_file new_db sock
 
 
-process_msg :: Database -> Socket -> IO Database
-process_msg database sock = do
+process_msg :: FilePath -> Database -> Socket -> IO Database
+process_msg aliases_file database sock = do
     msg <- recv sock max_bytes
-    ByteString.Char8.putStrLn $ msg
-    case read_alias msg of
-        Nothing -> do
-            ByteString.Char8.putStrLn $ "invalid: " <> msg
-            pure database
-        Just sender -> case sender of
-            AddressOnlySender addr -> if is_new_and_valid addr database
-                then save_addr addr *> pure (insert database addr)
-                else pure database
-            NamedSender ali -> if is_new_and_valid (address ali) database
-                then save ali *> pure (insert database (address ali))
-                else pure database
+    BS.Char8.putStrLn msg
+    let (invalids, valids) = msg
+                      & BS.split Word8._comma
+                      & map parsed
+                      & partitionEithers
+--     (invalids, valids) <- recv sock max_bytes
+--                       <&> BS.split Word8._comma
+--                       <&> map parsed
+--                       <&> partitionEithers
+    mapM_ report invalids
+    foldM (update_database aliases_file) database valids
 
 
+parsed_database :: ByteString -> Database
+parsed_database = BS.Char8.lines
+              <&> filter (not . BS.Char8.all isSpace)
+              <&> map addr
+              <&> Set.fromList
+    where
+        addr = BS.Char8.words <&> last <&> Address <&> normalized
 
 
+insert :: Address -> Database -> Database
+insert = Set.insert
 
--- when to normalize / extract?
+
+is_new_and_valid :: Address -> Database -> Bool
+is_new_and_valid addr db = is_valid && is_new
+    where
+        is_new = not $ db `contains` addr
+        is_valid = not $ or $
+            (`BS.isInfixOf` (from_address addr)) <$> Settings.ignored
+
+
+contains :: Database -> Address -> Bool
+contains database addr = normalized addr `Set.member` database
+
+
+save :: FilePath -> Database -> Sender -> IO Database
+save aliases_file database sender = do
+    BS.Char8.putStrLn ("saving: " <> line)
+    BS.appendFile aliases_file line
+    pure (insert (address sender) database)
+        where
+            line = rendered sender
+
+
+rendered :: Sender -> ByteString
+rendered = \case
+    Named nick name addr ->
+        "alias " <> BS.Char8.unwords [nick, name, enclosed addr] <> "\n"
+    AddressOnly addr ->
+        "alias " <> enclosed addr
+  where
+    enclosed :: Address -> ByteString
+    enclosed = from_address
+           <&> \addr -> BS.concat ["<" , addr , ">"]
+
+
+parsed :: ByteString -> Either ByteString Sender
+parsed line = case BS.Char8.words line of
+    [] -> Left ""
+    [email] -> email
+             & Address
+             & extracted
+             & AddressOnly
+             & Right
+    separated -> Right $ if BS.null name
+        then AddressOnly addr
+        else Named nick name addr
+            where
+                nick = generate_nick name
+                name = init separated & BS.Char8.unwords
+                addr = last separated & Address & extracted
+
+
+generate_nick :: ByteString -> ByteString
+generate_nick str = str
+                    & BS.map replace
+                    & BS.map Word8.toLower
+                    & hyphen_words
+                    & hyphen_unwords
+    where
+        replace :: Word8 -> Word8
+        replace c = if not (permitted c) then Word8._hyphen else c
+
+        permitted :: Word8 -> Bool
+        permitted c = Word8.isAlphaNum c || is_hyphen c
+
+        is_hyphen :: Word8 -> Bool
+        is_hyphen = (== Word8._hyphen)
+
+        -- words, but using hyphens instead of spaces.
+        -- splitting the string into words, then re-assembling it
+        -- is an easy way to ensure
+        -- that there is only one hyphen between each word.
+        hyphen_words :: ByteString -> [ByteString]
+        hyphen_words s = case BS.dropWhile is_hyphen s of
+            "" -> []
+            some -> w : hyphen_words rest
+                where
+                    (w, rest) = BS.break is_hyphen some
+
+        hyphen_unwords :: [ByteString] -> ByteString
+        hyphen_unwords = \case
+            [] -> ""
+            ws -> foldr1 (\w s -> w <> "-" <> s) ws
+
+
+report :: ByteString -> IO ()
+report msg = BS.Char8.putStrLn $ "invalid: " <> msg
+
+update_database :: FilePath -> Database -> Sender -> IO Database
+update_database aliases_file database sender = do
+    putStrLn (show sender)
+    if is_new_and_valid (address sender) database
+        then save aliases_file database sender
+        else pure database
+
+
+removeQuotes :: ByteString -> ByteString
+removeQuotes = BS.filter ((/=) Word8._quotedbl)
+
 -- an email address with capitals
--- (Dan.So@example.com)
--- must be saved that way to the database
--- so it must be sent that way from the client
--- but when compared for existing aliases,
--- then it needs to be case-insensitive?
-normalize :: Address -> Address
-normalize = extract <&> from_address <&> map toLower <&> Address
+-- must be saved that way to the database.
+-- but when checking for existing aliases,
+-- the comparison should be case-insensitive
+normalized :: Address -> Address
+normalized = extracted
+        <&> from_address
+        <&> BS.map Word8.toLower
+        <&> Address
+
+extracted :: Address -> Address
+extracted = from_address
+        <&> BS.filter (\c -> c `notElem` angle_brackets)
+        <&> Address
+    where
+        angle_brackets = [Word8._less, Word8._greater]

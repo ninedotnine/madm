@@ -1,16 +1,20 @@
 module Settings (
-    alias_file,
     port_number,
-    log_file,
+    ignored,
 ) where
 
-import Network.Socket ( ServiceName )
-
-alias_file :: FilePath
-alias_file = "/home/user/.mutt/aliases"
+import Data.ByteString (ByteString)
+import Network.Socket (ServiceName)
 
 port_number :: ServiceName
-port_number = "3000"
+port_number = "10345"
 
-log_file :: FilePath
-log_file = "/tmp/mutt-database-server.log"
+ignored :: [ByteString]
+ignored = [
+    "noreply",
+    "no-reply",
+    "donot-reply",
+    "do-not-reply",
+    "nepasrepondre"
+    ]
+
