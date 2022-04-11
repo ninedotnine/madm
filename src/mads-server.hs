@@ -9,6 +9,7 @@ import Data.Char (isSpace)
 import Data.Either (partitionEithers)
 import Data.Functor ((<&>))
 import Data.Function ((&))
+import Data.List (mapAccumL)
 import Data.Set qualified as Set
 import Data.Set (Set)
 import Data.Void (Void)
@@ -98,14 +99,19 @@ process_msg :: FilePath -> Database -> Socket -> IO Database
 process_msg aliases_file database sock = do
     msg <- recv sock max_bytes
     BS.Char8.putStrLn msg
+
+-- --     (invalids, valids) <- recv sock max_bytes
+-- --                       <&> BS.split Word8._comma
+--                          <&> squashed_commas
+--                          <&> map BS.Char8.strip
+-- --                       <&> map parsed
+-- --                       <&> partitionEithers
     let (invalids, valids) = msg
                       & BS.split Word8._comma
+                      & squashed_commas
+                      & map BS.Char8.strip
                       & map parsed
                       & partitionEithers
---     (invalids, valids) <- recv sock max_bytes
---                       <&> BS.split Word8._comma
---                       <&> map parsed
---                       <&> partitionEithers
     mapM_ report invalids
     foldM (update_database aliases_file) database valids
 
@@ -119,16 +125,12 @@ parsed_database = BS.Char8.lines
         addr = BS.Char8.words <&> last <&> Address <&> normalized
 
 
-insert :: Address -> Database -> Database
-insert = Set.insert
-
-
 is_new_and_valid :: Address -> Database -> Bool
 is_new_and_valid addr db = is_valid && is_new
     where
         is_new = not $ db `contains` addr
         is_valid = not $ or $
-            (`BS.isInfixOf` (from_address addr)) <$> Settings.ignored
+            (`BS.isInfixOf` from_address addr) <$> Settings.ignored
 
 
 contains :: Database -> Address -> Bool
@@ -139,21 +141,43 @@ save :: FilePath -> Database -> Sender -> IO Database
 save aliases_file database sender = do
     BS.Char8.putStrLn ("saving: " <> line)
     BS.appendFile aliases_file line
-    pure (insert (address sender) database)
+    pure (Set.insert (address sender) database)
         where
             line = rendered sender
 
 
 rendered :: Sender -> ByteString
 rendered = \case
-    Named nick name addr ->
+    Named (Just nick) name addr ->
         "alias " <> BS.Char8.unwords [nick, name, enclosed addr] <> "\n"
+    Named Nothing name addr ->
+        "alias " <> BS.Char8.unwords [name, enclosed addr] <> "\n"
     AddressOnly addr ->
         "alias " <> enclosed addr
   where
     enclosed :: Address -> ByteString
     enclosed = from_address
            <&> \addr -> BS.concat ["<" , addr , ">"]
+
+
+-- if one of the strings does not contain an email address
+-- then it must have been split because there was a comma in the name.
+-- this function sticks concats every string in the list
+-- that does not appear to have an email address
+-- (checked by whether it contains an '@')
+-- and concats that with the next string in the list.
+squashed_commas :: [ByteString] -> [ByteString]
+squashed_commas = accum
+              <&> snd
+              <&> filter (/= BS.empty)
+    where
+        accum :: [ByteString] -> (ByteString, [ByteString])
+        accum = mapAccumL (\s x ->
+            if has_email_address x
+                then ("", s <> x)
+                else (s <> x <> ",", "")
+            ) ""
+        has_email_address name = Word8._at `BS.elem` name
 
 
 parsed :: ByteString -> Either ByteString Sender
@@ -168,42 +192,46 @@ parsed line = case BS.Char8.words line of
         then AddressOnly addr
         else Named nick name addr
             where
-                nick = generate_nick name
+                nick = if BS.elem Word8._at name
+                    then Nothing
+                    else Just $ generate_nick name
                 name = init separated & BS.Char8.unwords
                 addr = last separated & Address & extracted
 
 
-generate_nick :: ByteString -> ByteString
-generate_nick str = str
-                    & BS.map replace
-                    & BS.map Word8.toLower
-                    & hyphen_words
-                    & hyphen_unwords
-    where
-        replace :: Word8 -> Word8
-        replace c = if not (permitted c) then Word8._hyphen else c
+                generate_nick :: ByteString -> ByteString
+                generate_nick = BS.map replace
+                            <&> BS.map Word8.toLower
+                            <&> hyphen_words
+                            <&> hyphen_unwords
+                    where
+                        replace :: Word8 -> Word8
+                        replace c = if not (permitted c)
+                            then Word8._hyphen
+                            else c
 
-        permitted :: Word8 -> Bool
-        permitted c = Word8.isAlphaNum c || is_hyphen c
+                        permitted :: Word8 -> Bool
+                        permitted c = Word8.isAlphaNum c
+                                   || is_hyphen c
 
-        is_hyphen :: Word8 -> Bool
-        is_hyphen = (== Word8._hyphen)
+                        is_hyphen :: Word8 -> Bool
+                        is_hyphen = (== Word8._hyphen)
 
-        -- words, but using hyphens instead of spaces.
-        -- splitting the string into words, then re-assembling it
-        -- is an easy way to ensure
-        -- that there is only one hyphen between each word.
-        hyphen_words :: ByteString -> [ByteString]
-        hyphen_words s = case BS.dropWhile is_hyphen s of
-            "" -> []
-            some -> w : hyphen_words rest
-                where
-                    (w, rest) = BS.break is_hyphen some
+                        -- words, but using hyphens instead of spaces.
+                        -- splitting the string into words, then
+                        -- re-assembling it is an easy way to ensure
+                        -- that there is only one hyphen between each word.
+                        hyphen_words :: ByteString -> [ByteString]
+                        hyphen_words s = case BS.dropWhile is_hyphen s of
+                            "" -> []
+                            some -> w : hyphen_words rest
+                                where
+                                    (w, rest) = BS.break is_hyphen some
 
-        hyphen_unwords :: [ByteString] -> ByteString
-        hyphen_unwords = \case
-            [] -> ""
-            ws -> foldr1 (\w s -> w <> "-" <> s) ws
+                        hyphen_unwords :: [ByteString] -> ByteString
+                        hyphen_unwords = \case
+                            [] -> ""
+                            ws -> foldr1 (\w s -> w <> "-" <> s) ws
 
 
 report :: ByteString -> IO ()
@@ -211,14 +239,13 @@ report msg = BS.Char8.putStrLn $ "invalid: " <> msg
 
 update_database :: FilePath -> Database -> Sender -> IO Database
 update_database aliases_file database sender = do
-    putStrLn (show sender)
     if is_new_and_valid (address sender) database
         then save aliases_file database sender
         else pure database
 
 
 removeQuotes :: ByteString -> ByteString
-removeQuotes = BS.filter ((/=) Word8._quotedbl)
+removeQuotes = BS.filter (/= Word8._quotedbl)
 
 -- an email address with capitals
 -- must be saved that way to the database.
@@ -226,13 +253,13 @@ removeQuotes = BS.filter ((/=) Word8._quotedbl)
 -- the comparison should be case-insensitive
 normalized :: Address -> Address
 normalized = extracted
-        <&> from_address
-        <&> BS.map Word8.toLower
-        <&> Address
+         <&> from_address
+         <&> BS.map Word8.toLower
+         <&> Address
 
 extracted :: Address -> Address
 extracted = from_address
-        <&> BS.filter (\c -> c `notElem` angle_brackets)
+        <&> BS.filter (`notElem` angle_brackets)
         <&> Address
     where
         angle_brackets = [Word8._less, Word8._greater]

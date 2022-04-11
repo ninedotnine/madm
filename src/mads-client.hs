@@ -39,7 +39,7 @@ main = do
 send_msg :: HostName -> ServiceName -> ByteString -> IO ()
 send_msg host port msg = do
     addr <- resolve
-    Exception.bracket (open addr) close (\sock -> sendAll sock msg)
+    Exception.bracket (open addr) close (`sendAll` msg)
     where
         resolve = do
             -- is it possible for getAddrInfo to return [] ?

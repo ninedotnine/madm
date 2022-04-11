@@ -3,7 +3,7 @@ module Types where
 import Data.ByteString (ByteString)
 
 
-data Sender = Named ByteString ByteString Address
+data Sender = Named (Maybe ByteString) ByteString Address
             | AddressOnly Address
     deriving (Eq, Ord, Read, Show)
 

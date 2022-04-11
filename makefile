@@ -15,12 +15,17 @@ all: bin/mads-server bin/mads-client
 
 bin/mads-client: src/mads-client.hs $(FILES) | bin cache
 	ghc $(HSFLAGS) $(GHC_EXTS) $(GHC_FLAGS) -o $@ $<
+	@rm -f cache/$(HI_DIR)/Main.hi
+	@rm -f cache/$(OBJ_DIR)/Main.o
 
 bin/mads-server: src/mads-server.hs $(FILES) | bin cache
 	ghc $(HSFLAGS) $(GHC_EXTS) $(GHC_FLAGS) -o $@ $<
+	@rm -f cache/$(HI_DIR)/Main.hi
+	@rm -f cache/$(OBJ_DIR)/Main.o
+
 
 bin cache:
-	mkdir bin/ cache/
+	mkdir $@
 
 .PHONY: clean
 clean:
