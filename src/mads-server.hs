@@ -1,9 +1,8 @@
 import Control.Exception qualified as Exception
-import Control.Monad (void, foldM)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS.Char8
-import Data.Functor ((<&>))
+import Data.Functor (void, (<&>))
 import Data.Function ((&))
 import Data.Void (Void)
 import Network.Socket (
@@ -32,11 +31,10 @@ import Network.Socket.ByteString (recv)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 
-import Contact
-import Settings qualified as Settings
-import Database (Database)
-import Database qualified as Database
-import Message qualified as Message
+import MADS.Server.Database (Database)
+import MADS.Server.Database qualified as Database
+import MADS.Server.Message qualified as Message
+import Settings
 
 main :: IO Void
 main = do
@@ -93,16 +91,9 @@ loop aliases_file database sock = do
 process_msg :: FilePath -> Database -> Socket -> IO Database
 process_msg aliases_file database sock = do
     (invalids, valids) <- recv sock Settings.max_bytes
-                      <&> Message.parse_all
---     (invalids, valids) <- recv sock Settings.max_bytes
---                       <&> BS.split Word8._comma
---                       <&> squashed_commas
---                       <&> map BS.Char8.strip
---                       <&> map parsed
---                       <&> partitionEithers
+                      <&> Message.parsed
     mapM_ report invalids
-    foldM (Database.update aliases_file) database valids
+    Database.update aliases_file database valids
 
 report :: ByteString -> IO ()
 report msg = BS.Char8.putStrLn $ "invalid: " <> msg
-

@@ -1,10 +1,15 @@
+import Prelude (IO, Applicative(..))
 import Control.Exception qualified as Exception
+import Data.Bool (not)
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS.Char8
-import Data.Function ((&))
+import Data.Eq
+import Data.Function
 import Data.Functor ((<&>))
-import Data.List qualified
+import Data.Maybe (Maybe(..))
+import Data.Monoid ((<>))
+import Data.List qualified as List
 import Network.Socket (
     addrSocketType,
     addrAddress,
@@ -27,13 +32,12 @@ import Settings qualified
 main :: IO ()
 main = do
     input <- BS.getContents
+    BS.putStr input
     case names input of
         "" -> do
-            BS.putStr input
             exitFailure
         text -> do
             send_msg "127.0.0.1" Settings.port_number text
-            BS.putStr input
 
 
 send_msg :: HostName -> ServiceName -> ByteString -> IO ()
@@ -43,7 +47,7 @@ send_msg host port msg = do
     where
         resolve = do
             -- is it possible for getAddrInfo to return [] ?
-            getAddrInfo (Just hints) (Just host) (Just port) <&> head
+            getAddrInfo (Just hints) (Just host) (Just port) <&> List.head
                 where
                     hints = defaultHints {
                         addrSocketType = Stream
@@ -70,20 +74,20 @@ names txt = [
     grep To,
     grep CC
     ] <&> ($ txt)
-        & map BS.Char8.strip
+        & List.map BS.Char8.strip
+        & List.filter (/= BS.empty)
         & BS.intercalate ","
 
 -- for long "From: " headers spanning multiple lines,
 -- all lines after the first are tab-indented.
 grep :: Header -> ByteString -> ByteString
-grep hdr txt = txt
-    & BS.Char8.lines
-    & Data.List.dropWhile (not . BS.isPrefixOf header)
-    & \case
+grep hdr = BS.Char8.lines
+       <&> List.dropWhile (not . BS.isPrefixOf header)
+       <&> \case
         [] -> ""
         first:more -> more
-                    & Data.List.takeWhile (BS.isPrefixOf "\t")
-                    & map BS.Char8.strip
+                    & List.takeWhile (BS.isPrefixOf "\t")
+                    & List.map BS.Char8.strip
                     & BS.Char8.concat
                     & (BS.drop len first <>)
     where

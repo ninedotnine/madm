@@ -1,26 +1,25 @@
-module Message (
+module MADS.Server.Message (
     parsed,
-    parse_all,
 ) where
 
 import Data.ByteString (ByteString)
 import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS.Char8
-import Data.Word8 (Word8)
-import Data.Word8 qualified as Word8
 import Data.Either (partitionEithers)
 import Data.Functor ((<&>))
 import Data.Function ((&))
 import Data.List (mapAccumL)
+import Data.Word8 (Word8)
+import Data.Word8 qualified as Word8
 
-import Contact
+import MADS.Server.Contact
 
-parse_all :: ByteString -> ([ByteString], [Contact])
-parse_all = BS.split Word8._comma
-          <&> squashed_commas
-          <&> map BS.Char8.strip
-          <&> map parsed
-          <&> partitionEithers
+parsed :: ByteString -> ([ByteString], [Contact])
+parsed = BS.split Word8._comma
+     <&> squashed_commas
+     <&> map BS.Char8.strip
+     <&> map line_parsed
+     <&> partitionEithers
 
 
 -- if one of the strings does not contain an email address
@@ -43,8 +42,8 @@ squashed_commas = accum
         has_email_address name = Word8._at `BS.elem` name
 
 
-parsed :: ByteString -> Either ByteString Contact
-parsed line = case BS.Char8.words line of
+line_parsed :: ByteString -> Either ByteString Contact
+line_parsed line = case BS.Char8.words line of
     [] -> Left ""
     [email] -> email
              & Address
