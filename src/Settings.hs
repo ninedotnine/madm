@@ -1,5 +1,6 @@
 module Settings (
     port_number,
+    max_bytes,
     ignored,
 ) where
 
@@ -8,6 +9,9 @@ import Network.Socket (ServiceName)
 
 port_number :: ServiceName
 port_number = "10345"
+
+max_bytes :: Int
+max_bytes = 8192
 
 ignored :: [ByteString]
 ignored = [

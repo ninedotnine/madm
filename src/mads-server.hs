@@ -5,13 +5,10 @@ import Data.ByteString qualified as BS
 import Data.ByteString.Char8 qualified as BS.Char8
 import Data.Word8 (Word8)
 import Data.Word8 qualified as Word8
-import Data.Char (isSpace)
 import Data.Either (partitionEithers)
 import Data.Functor ((<&>))
 import Data.Function ((&))
 import Data.List (mapAccumL)
-import Data.Set qualified as Set
-import Data.Set (Set)
 import Data.Void (Void)
 import Network.Socket (
     accept,
@@ -40,12 +37,10 @@ import System.Environment (getArgs)
 import System.Exit (exitFailure)
 
 import Types
-import Settings qualified
-
-max_bytes :: Int
-max_bytes = 8192
-
-type Database = Set Address
+import Settings qualified as Settings
+import Database (Database)
+import Database qualified as Database
+import Address
 
 main :: IO Void
 main = do
@@ -57,7 +52,7 @@ main = do
                             usage = "usage: mads-server filename"
     putStrLn $ ["loading ", aliases_file, "..."] & concat
     database <- BS.readFile aliases_file
-            <&> parsed_database
+            <&> Database.parsed
     run_server aliases_file database
 
 
@@ -69,7 +64,11 @@ run_server aliases_file database = do
     where
         resolve :: IO AddrInfo
         resolve = do
-            getAddrInfo (Just hints) Nothing (Just Settings.port_number) <&> head
+            -- FIXME: can getAddrInfo ever return [] ?
+            head <$> getAddrInfo
+                        (Just hints)
+                        Nothing
+                        (Just Settings.port_number)
                 where
                     hints = defaultHints {
                         addrFlags = [AI_PASSIVE],
@@ -97,67 +96,14 @@ loop aliases_file database sock = do
 
 process_msg :: FilePath -> Database -> Socket -> IO Database
 process_msg aliases_file database sock = do
-    msg <- recv sock max_bytes
-    BS.Char8.putStrLn msg
-
--- --     (invalids, valids) <- recv sock max_bytes
--- --                       <&> BS.split Word8._comma
---                          <&> squashed_commas
---                          <&> map BS.Char8.strip
--- --                       <&> map parsed
--- --                       <&> partitionEithers
-    let (invalids, valids) = msg
-                      & BS.split Word8._comma
-                      & squashed_commas
-                      & map BS.Char8.strip
-                      & map parsed
-                      & partitionEithers
+    (invalids, valids) <- recv sock Settings.max_bytes
+                      <&> BS.split Word8._comma
+                      <&> squashed_commas
+                      <&> map BS.Char8.strip
+                      <&> map parsed
+                      <&> partitionEithers
     mapM_ report invalids
-    foldM (update_database aliases_file) database valids
-
-
-parsed_database :: ByteString -> Database
-parsed_database = BS.Char8.lines
-              <&> filter (not . BS.Char8.all isSpace)
-              <&> map addr
-              <&> Set.fromList
-    where
-        addr = BS.Char8.words <&> last <&> Address <&> normalized
-
-
-is_new_and_valid :: Address -> Database -> Bool
-is_new_and_valid addr db = is_valid && is_new
-    where
-        is_new = not $ db `contains` addr
-        is_valid = not $ or $
-            (`BS.isInfixOf` from_address addr) <$> Settings.ignored
-
-
-contains :: Database -> Address -> Bool
-contains database addr = normalized addr `Set.member` database
-
-
-save :: FilePath -> Database -> Sender -> IO Database
-save aliases_file database sender = do
-    BS.Char8.putStrLn ("saving: " <> line)
-    BS.appendFile aliases_file line
-    pure (Set.insert (address sender) database)
-        where
-            line = rendered sender
-
-
-rendered :: Sender -> ByteString
-rendered = \case
-    Named (Just nick) name addr ->
-        "alias " <> BS.Char8.unwords [nick, name, enclosed addr] <> "\n"
-    Named Nothing name addr ->
-        "alias " <> BS.Char8.unwords [name, enclosed addr] <> "\n"
-    AddressOnly addr ->
-        "alias " <> enclosed addr
-  where
-    enclosed :: Address -> ByteString
-    enclosed = from_address
-           <&> \addr -> BS.concat ["<" , addr , ">"]
+    foldM (Database.update aliases_file) database valids
 
 
 -- if one of the strings does not contain an email address
@@ -180,7 +126,7 @@ squashed_commas = accum
         has_email_address name = Word8._at `BS.elem` name
 
 
-parsed :: ByteString -> Either ByteString Sender
+parsed :: ByteString -> Either ByteString Contact
 parsed line = case BS.Char8.words line of
     [] -> Left ""
     [email] -> email
@@ -237,29 +183,7 @@ parsed line = case BS.Char8.words line of
 report :: ByteString -> IO ()
 report msg = BS.Char8.putStrLn $ "invalid: " <> msg
 
-update_database :: FilePath -> Database -> Sender -> IO Database
-update_database aliases_file database sender = do
-    if is_new_and_valid (address sender) database
-        then save aliases_file database sender
-        else pure database
-
 
 removeQuotes :: ByteString -> ByteString
 removeQuotes = BS.filter (/= Word8._quotedbl)
 
--- an email address with capitals
--- must be saved that way to the database.
--- but when checking for existing aliases,
--- the comparison should be case-insensitive
-normalized :: Address -> Address
-normalized = extracted
-         <&> from_address
-         <&> BS.map Word8.toLower
-         <&> Address
-
-extracted :: Address -> Address
-extracted = from_address
-        <&> BS.filter (`notElem` angle_brackets)
-        <&> Address
-    where
-        angle_brackets = [Word8._less, Word8._greater]
