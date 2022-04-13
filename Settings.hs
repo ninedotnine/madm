@@ -1,6 +1,6 @@
 module Settings (
     port_number,
-    max_bytes,
+    max_msg_length,
     ignored,
 ) where
 
@@ -11,8 +11,8 @@ port_number :: ServiceName
 port_number = "10345"
 
 -- the maximum length of the message, in bytes.
-max_bytes :: Int
-max_bytes = 8192
+max_msg_length :: Int
+max_msg_length = 8192
 
 -- do not add aliases whose names
 -- contain any of these substrings.

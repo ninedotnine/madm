@@ -90,7 +90,7 @@ loop aliases_file database sock = do
 
 process_msg :: FilePath -> Database -> Socket -> IO Database
 process_msg aliases_file database sock = do
-    (invalids, valids) <- recv sock Settings.max_bytes
+    (invalids, valids) <- recv sock Settings.max_msg_length
                       <&> Message.parsed
     mapM_ report invalids
     Database.update aliases_file database valids
