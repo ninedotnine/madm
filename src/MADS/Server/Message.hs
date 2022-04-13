@@ -15,11 +15,15 @@ import Data.Word8 qualified as Word8
 import MADS.Server.Contact
 
 parsed :: ByteString -> ([ByteString], [Contact])
-parsed = BS.split Word8._comma
-     <&> squashed_commas
+parsed = split
      <&> map BS.Char8.strip
      <&> map line_parsed
      <&> partitionEithers
+
+
+split :: ByteString -> [ByteString]
+split = BS.split Word8._comma
+    <&> commas_squashed
 
 
 -- if one of the strings does not contain an email address
@@ -28,8 +32,8 @@ parsed = BS.split Word8._comma
 -- that does not appear to have an email address
 -- (checked by whether it contains an '@')
 -- and concats that with the next string in the list.
-squashed_commas :: [ByteString] -> [ByteString]
-squashed_commas = accum
+commas_squashed :: [ByteString] -> [ByteString]
+commas_squashed = accum
               <&> snd
               <&> filter (/= BS.empty)
     where
@@ -56,16 +60,16 @@ line_parsed line = case BS.Char8.words line of
             where
                 nick = if BS.elem Word8._at name
                     then Nothing
-                    else Just $ generate_nick name
+                    else Just $ generated_nick name
                 name = init separated & BS.Char8.unwords
                 addr = last separated & Address & extracted
 
 
-generate_nick :: ByteString -> ByteString
-generate_nick = BS.map replace
-            <&> BS.map Word8.toLower
-            <&> hyphen_words
-            <&> hyphen_unwords
+generated_nick :: ByteString -> ByteString
+generated_nick = BS.map replace
+             <&> BS.map Word8.toLower
+             <&> hyphen_words
+             <&> hyphen_unwords
     where
         replace :: Word8 -> Word8
         replace c = if not (permitted c)
