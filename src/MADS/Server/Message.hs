@@ -94,7 +94,3 @@ generate_nick = BS.map replace
         hyphen_unwords = \case
             [] -> ""
             ws -> foldr1 (\w s -> w <> "-" <> s) ws
-
-
-removeQuotes :: ByteString -> ByteString
-removeQuotes = BS.filter (/= Word8._quotedbl)
