@@ -88,8 +88,8 @@ grep hdr = BS.Char8.lines
         first:more -> more
                     & List.takeWhile (BS.isPrefixOf "\t")
                     & List.map BS.Char8.strip
-                    & BS.Char8.concat
-                    & (BS.drop len first <>)
+                    & (BS.drop len first :)
+                    & BS.Char8.unwords
     where
         len = BS.length header
         header = header_string hdr
