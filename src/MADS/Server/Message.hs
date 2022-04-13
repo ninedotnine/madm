@@ -56,13 +56,22 @@ line_parsed line = case BS.Char8.words line of
              & Right
     separated -> Right $ if BS.null name
         then AddressOnly addr
-        else Named nick name addr
-            where
-                nick = if BS.elem Word8._at name
-                    then Nothing
-                    else Just $ generated_nick name
-                name = init separated & BS.Char8.unwords
-                addr = last separated & Address & extracted
+--         else if "\"" `BS.isPrefixOf` (head separated)
+        else if is_address (head separated)
+            then AddressOnly addr
+            else Named nick name addr
+                where
+                    nick = if BS.elem Word8._at name
+                        then Nothing
+                        else Just $ generated_nick name
+                    name = init separated & BS.Char8.unwords
+                    addr = last separated & Address & extracted
+
+
+is_address :: ByteString -> Bool
+is_address name = "\"" `BS.isPrefixOf` name
+               && Word8._at `BS.elem` name
+               && Word8._period `BS.elem` name
 
 
 generated_nick :: ByteString -> ByteString
