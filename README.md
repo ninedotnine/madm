@@ -4,38 +4,41 @@
 
 ## background
 
-mutt unfortunately has no built-in feature
-for automatically adding new email addresses
-to an address book.
+[mutt](http://mutt.org) is my email client of choice.
 
-one common trick is to use mutt's `display_filter` setting
+Unfortunately, mutt has no built-in feature
+for automatically adding new email addresses
+to an address book. Many users choose to add their own,
+[as described here](http://wcaleb.org/blog/mutt-tips).
+
+A common trick is to use mutt's `display_filter` setting
 to run an arbitrary program on a message.
-this program could, for example,
+This program could, for example,
 scan it for things that appear to be email addresses
 and add them to a database automatically.
 
-http://wcaleb.org/blog/mutt-tips
-
-one drawback to this hack is that the program must finish
+One drawback to this hack is that the program must finish
 before the message can be displayed to the reader.
-if you want to check whether an email address
+If you want to check whether an email address
 has been seen before, then your `display_filter`
-will need to parse the entire aliases file
+will need to open and parse your entire aliases database
 every time mutt displays a message.
 
-this is pathologically inefficient.
+This is pathologically inefficient.
 
-one solution is to load the database in the background
+The solution is to load the database in the background
 in another process, and then use the `display_filter`
 to send the address to that process.
 
-this is what `mads` does.
+This is what `mads` does.
 
-## installation
+## building
 
+`make`.
 
+If the build fails with an error such as "Could not find module ‘Prelude’. There are files missing in the 'base' package" then try:
 
-try `make HSFLAGS=-static`
+`make HSFLAGS=-static`
 
 ## configuration
 
