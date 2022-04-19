@@ -60,19 +60,21 @@ send_msg host port msg = do
             connect sock $ addrAddress addr
             pure sock
 
-data Header = From | To | CC
+data Header = From | To | CC | ReplyTo
 
 header_string :: Header -> ByteString
 header_string = \case
     From -> "From: "
     To -> "To: "
     CC -> "CC: "
+    ReplyTo -> "Reply-To: "
 
 names :: ByteString -> ByteString
 names txt = [
     grep From,
     grep To,
-    grep CC
+    grep CC,
+    grep ReplyTo
     ] <&> ($ txt)
         & List.map BS.Char8.strip
         & List.filter (/= BS.empty)
