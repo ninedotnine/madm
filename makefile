@@ -2,7 +2,8 @@ SHELL = /bin/sh
 
 HSFLAGS := -dynamic -O1 -fmax-errors=2
 GHC_WARNS := -Wall -Wextra -Wmissing-exported-signatures -Widentities \
-             -Wpartial-fields -Wredundant-constraints
+             -Wpartial-fields -Wredundant-constraints \
+             -Wno-unused-imports
 GHC_EXTS := -XOverloadedStrings -XLambdaCase -XStrictData \
             -XScopedTypeVariables -XImportQualifiedPost
 
