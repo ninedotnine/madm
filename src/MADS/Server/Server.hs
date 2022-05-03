@@ -45,7 +45,7 @@ run aliases_file database = do
     where
         resolve :: IO AddrInfo
         resolve = do
-            -- FIXME: can getAddrInfo ever return [] ?
+            -- getAddrInfo promises to never return []
             head <$> getAddrInfo
                         (Just hints)
                         Nothing

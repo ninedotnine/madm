@@ -30,8 +30,11 @@ send_msg host port msg = do
     Exception.bracket (open addr) close (`sendAll` msg)
     where
         resolve = do
-            -- is it possible for getAddrInfo to return [] ?
-            getAddrInfo (Just hints) (Just host) (Just port) <&> List.head
+            -- getAddrInfo promises to never return []
+            List.head <$> getAddrInfo
+                            (Just hints)
+                            (Just host)
+                            (Just port)
                 where
                     hints = defaultHints {
                         addrSocketType = Stream
