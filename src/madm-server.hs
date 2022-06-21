@@ -6,8 +6,8 @@ import Data.Void (Void)
 import System.Environment (getArgs)
 import System.Exit (exitFailure)
 
-import MADS.Server.Database qualified as Database
-import MADS.Server.Server qualified as Server
+import MADM.Server.Database qualified as Database
+import MADM.Server.Server qualified as Server
 
 main :: IO Void
 main = do

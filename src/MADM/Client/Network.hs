@@ -1,4 +1,4 @@
-module MADS.Client.Network (
+module MADM.Client.Network (
     send_msg,
 ) where
 

@@ -1,6 +1,6 @@
-# mutt alias danabase server
+# mutt alias danabase manager
 
-`mads` is a server for managing mutt aliases.
+`madm` is a server for managing mutt aliases.
 
 ## background
 
@@ -30,7 +30,7 @@ The solution is to load the database in the background
 in another process, and then use the `display_filter`
 to send the address to that process.
 
-This is what `mads` does.
+This is what `madm` does.
 
 ## building
 
@@ -42,16 +42,16 @@ If the build fails with an error such as "Could not find module ‘Prelude’. T
 
 ## configuration
 
-`mads` is configured by modifying `Settings.hs` and rebuilding.
+`madm` is configured by modifying `Settings.hs` and rebuilding.
 
 ## usage
 
-`bin/mads-server &`
+`bin/madm-server &`
 
 alternatively,
 
-`systemctl --user start --now mads.service`
+`systemctl --user start --now madm.service`
 
 then add this line to your `.muttrc`:
 
-`set display_filter=mads-client`
+`set display_filter=madm-client`

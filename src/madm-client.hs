@@ -4,8 +4,8 @@ import Data.ByteString qualified as BS
 import System.Exit (exitFailure)
 
 import Settings qualified
-import MADS.Client.Message (names)
-import MADS.Client.Network (send_msg)
+import MADM.Client.Message (names)
+import MADM.Client.Network (send_msg)
 
 main :: IO ()
 main = do

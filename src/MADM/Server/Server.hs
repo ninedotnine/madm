@@ -1,4 +1,4 @@
-module MADS.Server.Server (
+module MADM.Server.Server (
     run
 ) where
 
@@ -32,9 +32,9 @@ import Network.Socket (
     )
 import Network.Socket.ByteString (recv)
 
-import MADS.Server.Database (Database)
-import MADS.Server.Database qualified as Database
-import MADS.Server.Message qualified as Message
+import MADM.Server.Database (Database)
+import MADM.Server.Database qualified as Database
+import MADM.Server.Message qualified as Message
 import Settings qualified
 
 run :: FilePath -> Database -> IO Void

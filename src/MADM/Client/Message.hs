@@ -1,4 +1,4 @@
-module MADS.Client.Message (
+module MADM.Client.Message (
     names,
 ) where
 

@@ -15,13 +15,13 @@ GHC_FLAGS := -outputdir $(CACHE) -isrc/ \
 
 
 .PHONY: all
-all: bin/mads-server bin/mads-client
+all: bin/madm-server bin/madm-client
 
 
-bin/mads-client: src/mads-client.hs src/MADS/Client/*
-bin/mads-server: src/mads-server.hs src/MADS/Server/*
+bin/madm-client: src/madm-client.hs src/MADM/Client/*
+bin/madm-server: src/madm-server.hs src/MADM/Server/*
 
-bin/mads-client bin/mads-server: Settings.hs | bin $(CACHE)
+bin/madm-client bin/madm-server: Settings.hs | bin $(CACHE)
 	ghc $(GHC_FLAGS) -o $@ $(patsubst bin/%,src/%.hs,$@)
 	@rm -f $(CACHE)/Main.o $(CACHE)/Main.hi
 

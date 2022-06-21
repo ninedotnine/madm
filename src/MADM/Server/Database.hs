@@ -1,4 +1,4 @@
-module MADS.Server.Database (
+module MADM.Server.Database (
     Database,
     parsed,
     update,
@@ -15,7 +15,7 @@ import Data.Set qualified as Set
 import Data.Set (Set)
 import Data.Word8 qualified as Word8
 
-import MADS.Server.Contact
+import MADM.Server.Contact
 import Settings
 
 type Database = Set Address

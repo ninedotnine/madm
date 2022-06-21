@@ -1,4 +1,4 @@
-module MADS.Server.Message (
+module MADM.Server.Message (
     parsed,
 ) where
 
@@ -12,7 +12,7 @@ import Data.List (mapAccumL)
 import Data.Word8 (Word8)
 import Data.Word8 qualified as Word8
 
-import MADS.Server.Contact
+import MADM.Server.Contact
 
 parsed :: ByteString -> ([ByteString], [Contact])
 parsed = split

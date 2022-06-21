@@ -1,4 +1,4 @@
-module MADS.Server.Contact (
+module MADM.Server.Contact (
     Contact(..),
     Address(..),
     address,
