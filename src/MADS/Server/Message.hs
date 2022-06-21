@@ -54,18 +54,17 @@ line_parsed line = case BS.Char8.words line of
              & extracted
              & AddressOnly
              & Right
-    separated -> Right $ if BS.null name
-        then AddressOnly addr
---         else if "\"" `BS.isPrefixOf` (head separated)
-        else if is_address (head separated)
+    separated -> let
+        -- these are safe: `separated` must have at least 2 items
+        name = init separated & BS.Char8.unwords
+        addr = last separated & Address & extracted
+        in Right $ if BS.null name || is_address (head separated)
             then AddressOnly addr
-            else Named nick name addr
-                where
-                    nick = if BS.elem Word8._at name
-                        then Nothing
-                        else Just $ generated_nick name
-                    name = init separated & BS.Char8.unwords
-                    addr = last separated & Address & extracted
+            else let
+                nick = if BS.elem Word8._at name
+                    then Nothing
+                    else Just $ generated_nick name
+                in Named nick name addr
 
 
 is_address :: ByteString -> Bool
